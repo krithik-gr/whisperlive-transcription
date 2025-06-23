@@ -1,38 +1,66 @@
 import socketio
-from werkzeug.serving import run_simple
+import os
+import uuid
+import eventlet
+import eventlet.wsgi
 
+# Socket.IO server for frontend
 sio = socketio.Server(cors_allowed_origins='*')
 app = socketio.WSGIApp(sio)
+
+# Socket.IO client to talk to backend
 client_sio = socketio.Client()
+
+@client_sio.event
+def connect():
+    print("✅ Connected to Whisper backend server at http://localhost:5000")
+
+@client_sio.event
+def disconnect():
+    print("❌ Disconnected from Whisper backend server.")
+
+@client_sio.on("transcription")
+def on_transcription(data):
+    print(f"📨 Received transcription from backend: {data}")
+    for sid in sio.manager.get_participants("/", None):
+        sio.emit("transcription", data, to=sid)
+
+# Connect to backend Whisper server
+client_sio.connect("http://localhost:5000")
 
 @sio.event
 def connect(sid, environ):
-    print(f"[Frontend] Connected: {sid}")
+    print(f"[Frontend] ✅ Connected: {sid}")
 
 @sio.event
 def disconnect(sid):
-    print(f"[Frontend] Disconnected: {sid}")
+    print(f"[Frontend] ❌ Disconnected: {sid}")
 
 @sio.event
 def audio_blob(sid, data):
-    print(f"📨 Received audio blob from frontend: {len(data)} bytes")
-    if client_sio.connected:
-        client_sio.emit("audio_blob", data)
-
-@client_sio.event
-def transcription(data):
-    print(f"[🎤 Backend] Transcription: {data}")
-    sio.emit("transcription", data)
-
-def start_whisperlive_client():
+    print(f"🎧 Received audio blob from frontend: {len(data)} bytes")
     try:
-        print("🔌 Connecting to WhisperLive at http://localhost:5000...")
-        client_sio.connect("http://localhost:5000")
-        print("✅ Connected to WhisperLive!")
-    except Exception as e:
-        print(f"❌ Could not connect to WhisperLive: {e}")
+        # Save audio to a temp file
+        temp_filename = f"temp_{uuid.uuid4().hex}.webm"
+        with open(temp_filename, "wb") as f:
+            f.write(data)
+        print(f"📁 Saved blob as {temp_filename}")
 
-if __name__ == '__main__':
-    start_whisperlive_client()
-    print("🚀 Starting proxy server on port 6000...")
-    run_simple('0.0.0.0', 6000, app)
+        # Read it back as bytes
+        with open(temp_filename, "rb") as f:
+            audio_bytes = f.read()
+
+        # Send to backend for transcription
+        print("📤 Sending blob to backend for transcription...")
+        client_sio.emit("audio", audio_bytes)
+
+        os.remove(temp_filename)
+
+    except Exception as e:
+        print(f"⚠ Error handling blob: {e}")
+        sio.emit("transcription", "Transcription failed.", to=sid)
+
+# Start proxy
+if __name__ == "__main__":
+    print("🚀 Starting proxy server on http://localhost:5050")
+    eventlet.wsgi.server(eventlet.listen(('0.0.0.0', 5050)), app)
