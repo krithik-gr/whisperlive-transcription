@@ -1,0 +1,24 @@
+# Ignore virtual environments
+whisper_env/
+env/
+.venv/
+
+# Ignore Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Ignore VS Code settings
+.vscode/
+
+# Ignore Node modules
+whisperlive-client/node_modules/
+
+# Ignore build output
+whisperlive-client/build/
+
+# Environment files
+.env
+
+# Logs
+*.log
