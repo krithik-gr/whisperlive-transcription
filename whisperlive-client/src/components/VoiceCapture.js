@@ -8,21 +8,20 @@ const VoiceCapture = () => {
   const [transcript, setTranscript] = useState('');
   const [isRecording, setIsRecording] = useState(false);
 
-  // Connect socket on mount
   useEffect(() => {
-    console.log('📡 Connecting to socket...');
-    socketRef.current = io('http://localhost:6000');
+    console.log('📡 Connecting to proxy server...');
+    socketRef.current = io('http://localhost:5050');
 
     socketRef.current.on('connect', () => {
-      console.log('✅ Connected to proxy server');
+      console.log('✅ Connected to proxy');
     });
 
     socketRef.current.on('disconnect', () => {
-      console.log('⚠️ Disconnected from socket');
+      console.log('❌ Disconnected from proxy');
     });
 
     socketRef.current.on('transcription', (text) => {
-      console.log('📝 Transcription:', text);
+      console.log('📝 Transcription received:', text);
       setTranscript(text);
     });
 
@@ -31,14 +30,13 @@ const VoiceCapture = () => {
     };
   }, []);
 
-  // Start recording
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       recordedChunksRef.current = [];
 
       const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm'
+        mimeType: 'audio/webm',
       });
 
       mediaRecorder.ondataavailable = (event) => {
@@ -47,10 +45,12 @@ const VoiceCapture = () => {
         }
       };
 
-      mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
-        socketRef.current.emit('audio_blob', audioBlob);
-        console.log('📤 Audio blob sent');
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
+        const arrayBuffer = await blob.arrayBuffer();
+
+        socketRef.current.emit('audio_blob', arrayBuffer);
+        console.log('📤 Sent audio blob to proxy');
       };
 
       mediaRecorderRef.current = mediaRecorder;
@@ -58,11 +58,10 @@ const VoiceCapture = () => {
       setIsRecording(true);
       console.log('⏺️ Recording started');
     } catch (err) {
-      console.error('🎤 Microphone access denied:', err);
+      console.error('🎤 Microphone access error:', err);
     }
   };
 
-  // Stop recording
   const stopRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
@@ -73,20 +72,32 @@ const VoiceCapture = () => {
 
   return (
     <div style={{ padding: '20px', fontFamily: 'Arial' }}>
-      <h2>🎙️ WhisperLive Transcription</h2>
-      <button onClick={isRecording ? stopRecording : startRecording}>
+      <h2>🎙️ WhisperLive Voice Transcription</h2>
+      <button
+        onClick={isRecording ? stopRecording : startRecording}
+        style={{
+          padding: '10px 20px',
+          backgroundColor: isRecording ? '#d9534f' : '#0275d8',
+          color: 'white',
+          border: 'none',
+          borderRadius: '5px',
+          fontSize: '16px',
+        }}
+      >
         {isRecording ? 'Stop Recording' : 'Start Recording'}
       </button>
+
       <div
         style={{
           marginTop: '20px',
-          padding: '10px',
-          background: '#f5f5f5',
-          borderRadius: '8px',
-          fontSize: '16px'
+          padding: '15px',
+          background: '#f1f1f1',
+          borderRadius: '10px',
+          fontSize: '16px',
+          minHeight: '60px',
         }}
       >
-        {transcript || '🔊 Speak something...'}
+        {transcript ? `📝 ${transcript}` : '🗣️ Say something...'}
       </div>
     </div>
   );
